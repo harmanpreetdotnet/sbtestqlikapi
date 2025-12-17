@@ -1,0 +1,38 @@
+name: Build and Upload qlik-api Artifact
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  APP_NAME: az-qlikengine-api-repo
+  BLOB_FOLDER: switchbladeapps
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # ❌ NO dependency install here
+      # ❌ NO pip install
+      # ❌ NO node_modules
+      # Azure App Service will do this at deploy time
+
+      - name: Create ZIP artifact (source only)
+        run: |
+          zip -r ${{ env.APP_NAME }}.zip . \
+            -x ".git/*" \
+               ".github/*" \
+               "__pycache__/*" \
+               "*.pyc"
+
+      - name: Upload ZIP to Azure Blob Storage
+        run: |
+          curl -X PUT \
+            -H "x-ms-blob-type: BlockBlob" \
+            --data-binary "@${{ env.APP_NAME }}.zip" \
+            "https://${{ secrets.AZURE_STORAGE_ACCOUNT }}.blob.core.windows.net/${{ secrets.AZURE_STORAGE_CONTAINER }}/${{ env.BLOB_FOLDER }}/${{ env.APP_NAME }}.zip${{ secrets.AZURE_STORAGE_SAS }}"

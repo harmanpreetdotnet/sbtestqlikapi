@@ -17,22 +17,36 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # ❌ NO dependency install here
-      # ❌ NO pip install
-      # ❌ NO node_modules
-      # Azure App Service will do this at deploy time
+      # No dependency installation here
+      # Azure App Service will build dependencies at deploy time
 
       - name: Create ZIP artifact (source only)
         run: |
-          zip -r ${{ env.APP_NAME }}.zip . \
+          zip -r "${APP_NAME}.zip" . \
             -x ".git/*" \
                ".github/*" \
                "__pycache__/*" \
                "*.pyc"
 
       - name: Upload ZIP to Azure Blob Storage
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_CONTAINER: ${{ secrets.AZURE_STORAGE_CONTAINER }}
+          AZURE_STORAGE_SAS_RAW: ${{ secrets.AZURE_STORAGE_SAS }}  # may include leading '?'
         run: |
-          curl -X PUT \
-            -H "x-ms-blob-type: BlockBlob" \
-            --data-binary "@${{ env.APP_NAME }}.zip" \
-            "https://${{ secrets.AZURE_STORAGE_ACCOUNT }}.blob.core.windows.net/${{ secrets.AZURE_STORAGE_CONTAINER }}/${{ env.BLOB_FOLDER }}/${{ env.APP_NAME }}.zip${{ secrets.AZURE_STORAGE_SAS }}"
+          # Normalize SAS (remove leading '?' if present)
+          SAS="${AZURE_STORAGE_SAS_RAW#\?}"
+
+          echo "Uploading artifact to:"
+          echo "  Storage account : ${AZURE_STORAGE_ACCOUNT}"
+          echo "  Container       : ${AZURE_STORAGE_CONTAINER}"
+          echo "  Blob path       : ${BLOB_FOLDER}/${APP_NAME}.zip"
+
+          az storage blob upload \
+            --account-name "${AZURE_STORAGE_ACCOUNT}" \
+            --container-name "${AZURE_STORAGE_CONTAINER}" \
+            --name "${BLOB_FOLDER}/${APP_NAME}.zip" \
+            --file "${APP_NAME}.zip" \
+            --sas-token "${SAS}" \
+            --overwrite true \
+            --only-show-errors
